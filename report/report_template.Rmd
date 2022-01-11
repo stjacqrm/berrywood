@@ -1,0 +1,845 @@
+%
+\documentclass[12pt]{article}
+\usepackage{Sweave}
+\usepackage{pdflscape}
+\usepackage{geometry}
+\usepackage{longtable}
+\geometry{letterpaper, portrait, margin=1in}
+\SweaveOpts{height=6,width=10,echo=FALSE}
+\setkeys{Gin}{width=6in}
+\usepackage[format=hang,font=small,labelfont=bf]{caption}
+\usepackage[dvipsnames]{xcolor}
+
+\title{SARS-CoV-2 Characterization, Mutation Prediction \& \protect\\ Genome Analysis \protect\\[0.2in]Berrywood Analysis for:\protect\\"Title goes here"}
+
+
+\begin{document}
+\maketitle
+\tableofcontents
+
+<<echo=FALSE>>=
+
+#----------------------
+# Input Files
+#----------------------
+
+library("optparse")
+
+option_list = list(
+  make_option(c("-a", "--analysis"), type="character", default="./berrywood_{today}.csv",
+              help="analysis results file [default= %default]", metavar="character"),
+  make_option(c("-v", "--vadr"), type="character", default="./vadr_total.csv",
+              help="vadr_results [default= %default]", metavar="character"),
+  make_option(c("-m", "--message"), type="character", default="",
+              help="optional conclusions text [default= %default]", metavar="character"))
+
+
+opt_parser = OptionParser(option_list=option_list);
+opt = parse_args(opt_parser);
+seq.results.file <- opt$analysis
+seq.vadr.file <- opt$vadr
+message <- opt$message
+
+  seq.results <- read.delim(seq.results.file,header=T,sep = ";",stringsAsFactors=F,
+    colClasses = c(rep("character", 11)))
+    # Cols - Sample,status,lineage,pango_version,clade,next_version,insert,del,nuc_sub,aa_sub
+  seq.vadr <- read.delim(seq.vadr.file,header=T,sep = ",",stringsAsFactors=F,
+    colClasses = c(rep("character", 1), rep("numeric", 1), rep("character",12)))
+    # Cols - isoalte,lenght,status,annotated,model,subgenera, species, num_feats, feats_not_ann,num_feat_5,num_feat_3,feat-alerts,seq_alerts
+
+#------------------------------
+# Plotting libraries
+#------------------------------
+library(ggplot2)
+library(ggsci)
+library(cowplot)
+library(grid)
+library(gridExtra)
+
+@
+
+\newpage
+
+\section{Overview}
+\setlength\floatsep{0pt}
+\setlength\intextsep{0pt}
+
+The Berrywood Lite analysis report provides an analytical overview of SARS-CoV-2 (SC2) genomic data. The pipeline processes SC2 fasta files using VADR to annotate, Pangolin to characterize, and NextClade to detect mutations in the genomes. The Results section of the report identifies which isolates should be submitted to NCBI, based on the VADR status. Isolates that have failed VADR may be rejected if submitted to NCBI, and should be excluded from submissions. A csv file with the corresponding results is also provided by the pipeline. A brief overview of the lineages identified in the analysis is given in the Overview section. Variants of Concern and Interest are discussed in the VOC and VOI section, respectively. A breakdown of isolates that have Passed and Failed VADR annotation is also provided.
+\vspace{20pt}
+
+@
+\begin{figure}[!htb]
+\begin{center}
+<<echo=FALSE,fig=TRUE,height=10>>=
+
+#---------------------------
+# Table 1 - VADR status table
+#---------------------------
+library(xtable)
+library(stringr)
+library(dplyr)
+library(sjPlot)
+
+berrywood_output <- seq.results
+berrywood_output$sample <- str_sub(berrywood_output$sample, start=1, end=12)
+
+lineage_pf_table <- berrywood_output[1:3]
+write.table(lineage_pf_table, "lineage_pf_table.csv", sep=",", row.names = FALSE, col.names = FALSE)
+lineage_pf_table <- read.csv("lineage_pf_table.csv", header = FALSE)
+colnames(lineage_pf_table) <- c("Sample","Status","Lineage")
+write.table(lineage_pf_table, "lineage_pf_table.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+
+sjPlot::plot_xtab(lineage_pf_table$Lineage, lineage_pf_table$Status, margin = "row", title = "Percent Pass/Fail of Each Lineage", bar.pos = "stack", coord.flip = TRUE,drop.empty=TRUE, geom.colors = c("#e1be6a", "#40b0a6"))
+
+@
+\captionsetup{skip=5pt}
+\caption{Percent Pass/Fail of Each Lineage. Each lineage identified in the analysis is included
+in the figure. Those isolates that passed VADR are in light blue, while those isolates
+that failed VADR are gold. The total number of isolates present that passed and
+failed are included in the figure on their respective bars, as well as the percentage
+passed or failed.}
+\end{center}
+\end{figure}
+
+
+
+
+@
+\section{Results}
+
+<<echo=FALSE,results=tex>>=
+
+#---------------------------------------------------------
+# Calculate percent of isolates which passed checks
+#---------------------------------------------------------
+library(stringr)
+
+
+fails <- subset(seq.results, vadr_status == "FAIL", select=c(sample,vadr_status))
+fails.length <- length(fails$sample)
+total.isolates <- length(seq.results$sample)
+passed.isolates <- total.isolates - fails.length
+perc.passed <- round((passed.isolates / total.isolates * 100))
+
+#-----------------------------------------
+# Print results summary
+#-----------------------------------------
+
+cat(paste("Of the ", total.isolates, " isolates submitted as part of this exercise, ", passed.isolates, " (", perc.passed, "\\%) were determined to be of adequate quality to be submitted to NCBI.\n", sep=""))
+@
+
+\vspace{20pt}
+<<label=xtable2,echo=FALSE,results=tex>>=
+
+#---------------------------
+# Table 2 - Analysis Summary
+#---------------------------
+library(xtable)
+library(stringr)
+library(dplyr)
+
+passed <- subset(seq.results, vadr_status == "PASS", select=c(sample,vadr_status,pangolin_lineage,clade))
+write.table(passed, "vadr_passed_samples.csv", sep=",", row.names = FALSE, col.names = TRUE)
+data(passed)
+dat <- passed[1:4]
+x <- xtable(dat)
+colnames(x) <- c("Sample","VADR Status","Lineage","Clade")
+next.table <- 1
+align(x) <- xalign(x)
+digits(x) <- xdigits(x)
+display(x) <- xdisplay(x)
+print(xtable(x, caption = "A summary of isolates that passed VADR analysis. Isolates that passed VADR are listed in ascending order, as well as their lineage and clade assignments. These isolates should be submitted to both NCBI and GISAID. While GISAID uses a different annotation pipeline than NCBI, these isolates may pass GISAID submission standards.",
+  label = "tab:one"), hline.after=c(-1,0), tabular.environment = "longtable", caption.placement = "top", include.rownames=FALSE)
+next.table <- next.table + 1
+
+@
+
+
+@
+\newpage
+\newgeometry{top=0.8in,bottom=0.9in}
+\subsection{Lineage Analysis}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+
+cat(paste("Due to the evolving nature of the pandemic and SARS-CoV-2 genome, Public Health Laboratories are keeping detailed records of Variants of Concern and Variants of interest.\n", sep=""))
+@
+\vspace{20pt}
+
+@
+\subsubsection{Overall Lineage Analysis}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+
+cat(paste("An overview of all lineages analyzed is provided in Figure 2. \n", sep=""))
+@
+\begin{figure}[!htb]
+\begin{center}
+<<echo=FALSE,fig=TRUE,height=10>>=
+
+#---------------------------
+# Table 1 - VADR status table
+#---------------------------
+library(stringr)
+library(dplyr)
+library(ggplot2)
+
+berrywood_output <- seq.results
+berrywood_output$sample <- str_sub(berrywood_output$sample, start=1, end=12)
+lineage_table <- table(berrywood_output$pangolin_lineage)
+write.table(lineage_table, "lineage_table.csv", sep=",", row.names = FALSE, col.names = FALSE)
+lineage_table <- read.csv("lineage_table.csv", header = FALSE)
+colnames(lineage_table) <- c("Lineage","Frequency")
+write.table(lineage_table, "lineage_table.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+num_lineages <- length(lineage_table$Lineage)
+p <- ggplot(data=lineage_table, aes(x=Lineage,y=Frequency))+
+  geom_bar(aes(reorder(Lineage,-Frequency),Frequency, fill=Lineage),stat="identity") +
+  scale_fill_viridis_d()+
+  theme_minimal() +
+  theme(axis.text = element_text(angle=90, hjust=1)) +
+  labs(x= "Lineages")
+print(p)
+@
+\captionsetup{skip=5pt}
+\caption{Frequency of Lineages identified in the Berrywood Lite analysis. The Fre-
+quency, or total number of times the lineage was identified in the analysis, is
+on the y-axis. The lineages are listed on the x-axis in descending order. These
+frequencies include all isolates in the analysis, both passed and failed.
+}
+\end{center}
+\end{figure}
+
+@
+\end{small}
+
+
+@
+\subsubsection{Variants of Concern}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+
+cat(paste("Currently, CDC defines the following as Variants of Concern:\n", sep=""))
+@
+\vspace{20pt}
+<<label=xtable1,echo=FALSE,results=tex>>=
+
+#---------------------------------
+# Make VOC table
+#------------------------------
+library(xtable)
+library(stringr)
+
+
+voc <- matrix(c("B.1.617.2","AY","B.1.1.529"),ncol=1,byrow=TRUE)
+colnames(voc) <- c("Variants of Concern")
+c <- xtable(voc)
+
+next.table <- 1
+print(xtable(c, caption = "Variants of Concern",
+  label = "tab:one"), caption.placement = "top", include.rownames=FALSE)
+next.table <- next.table + 1
+
+@
+\end{small}
+
+@
+\subsubsection{Variants of Interest}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+cat(paste("Currently, CDC has decided that there are no linages that meet the criteria for Variant of Interest.\n", sep=""))
+
+@
+\end{small}
+
+
+@
+\subsection{QC analysis of Samples}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+cat(paste("Listed below is an in-depth analysis of the samples that passed and failed VADR annotation.\n", sep=""))
+
+@
+\subsubsection{Passed Samples}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+#---------------------------------------------------------
+# Calculate VOC lineage trends from passed data
+#---------------------------------------------------------
+library(stringr)
+library(dplyr)
+
+passed <- subset(seq.results, vadr_status == "PASS", select=c(sample,pangolin_lineage))
+total.passed <- length(passed$sample)
+
+b16172.isolates <- subset(passed, pangolin_lineage == "B.1.617.2", select=c(sample,pangolin_lineage))
+total.b16172 <- length(b16172.isolates$sample)
+perc.b16172 <- round((total.b16172 / total.passed * 100))
+
+ay.isolates <- passed[str_detect(passed$pangolin_lineage, "AY"), ]
+total.ay <- length(ay.isolates$sample)
+perc.ay <- round((total.ay / total.passed * 100))
+
+b11529.isolates <- passed[str_detect(passed$pangolin_lineage, "B.1.1.529"), ]
+total.b11529 <- length(b11529.isolates$sample)
+perc.b11529 <- round((total.b11529 / total.passed * 100))
+
+merged.voc.df.passed <- rbind(b16172.isolates,ay.isolates)
+merged.voc.df.passed <- rbind(merged.voc.df.passed,b11529.isolates)
+total.voc <- length(merged.voc.df.passed$sample)
+perc.voc.passed <- round((total.voc / total.passed * 100))
+
+#--------------------------
+# print Lineage summaries
+#--------------------------
+
+cat(paste("Of the ", total.passed, " isolates that passed VADR QC, ", total.voc, " (", perc.voc.passed, "\\%) were determined to be Variants of Concern. In the passed VOC dataset,  ",total.b16172, " (", perc.b16172, "\\%) were lineage B.1.617.2, ",total.ay, " (", perc.ay, "\\%) were lineage AY, and" ,total.b11529, " (", perc.b11529, "\\%) were lineage Omicron.\n", sep=""))
+
+@
+\vspace{20pt}
+<<label=xtable3,echo=FALSE,results=tex>>=
+
+#---------------------------
+# Table 3 - Analysis Summary
+#---------------------------
+library(xtable)
+library(stringr)
+library(dplyr)
+
+data(merged.voc.df.passed)
+dat <- merged.voc.df.passed[1:2]
+x <- xtable(dat)
+colnames(x) <- c("Sample","Lineage")
+next.table <- 1
+print(xtable(x, caption = "Passed Sample VOC Lineage Assignment",
+  label = "tab:one"), hline.after=c(-1,0), tabular.environment = "longtable", caption.placement = "top", include.rownames=FALSE)
+next.table <- next.table + 1
+
+
+@
+\end{small}
+
+@
+\subsubsection{Failed Samples}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+
+#---------------------------------------------------------
+# Calculate trends from failed data
+#---------------------------------------------------------
+library(stringr)
+
+vadr_reasons <- subset(seq.vadr, status =="FAIL", select=c(isolate,seq_alerts))
+vadr_reasons <- setNames(vadr_reasons, c("sample","seq_alerts"))
+
+failed <- subset(seq.results, vadr_status == "FAIL", select=c(sample,vadr_status,pangolin_lineage))
+failed <- merge(vadr_reasons,failed,by="sample")
+failed <- failed[,c(1,3,4,2)]
+write.table(failed, "vadr_failed_samples.csv", sep=",", row.names = FALSE, col.names = TRUE)
+total.failed <- length(failed$sample)
+
+total.samples <- length(seq.results$sample)
+perc.failed <- round((total.failed / total.samples * 100))
+failed2 <- failed[,c(1,3,4)]
+#--------------------------
+# print Lineage summaries
+#--------------------------
+
+cat(paste("Of the ", total.samples, " isolates that were analyzed, ", total.failed, " (", perc.failed, "\\%) failed VADR annotation analysis. \n", sep=""))
+
+@
+\vspace{20pt}
+<<label=xtable4,echo=FALSE,results=tex>>=
+
+#---------------------------
+# Table 3 - Analysis Summary
+#---------------------------
+library(xtable)
+library(stringr)
+library(dplyr)
+
+data(failed2)
+dat <- failed2[1:3]
+x <- xtable(dat)
+colnames(x) <- c("Sample","Lineage","Seq Error")
+next.table <- 1
+print(xtable(x, caption = "Failed Sample Lineage Assignment and VADR Errors.",
+  label = "tab:one"),size="\\fontsize{8pt}{10pt}\\selectfont", hline.after=c(-1,0), tabular.environment = "longtable", caption.placement = "top", include.rownames=FALSE)
+next.table <- next.table + 1
+
+@
+\end{small}
+
+
+@
+\subsubsection{Failed VOC Samples}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+
+#---------------------------------------------------------
+# Calculate VOC lineage trends from failed data
+#---------------------------------------------------------
+library(stringr)
+
+vadr_reasons <- subset(seq.vadr, status =="FAIL", select=c(isolate,seq_alerts))
+vadr_reasons <- setNames(vadr_reasons, c("sample","seq_alerts"))
+
+failed <- subset(seq.results, vadr_status == "FAIL", select=c(sample,vadr_status,pangolin_lineage))
+failed <- merge(vadr_reasons,failed,by="sample")
+failed <- failed[,c(1,3,4,2)]
+total.failed <- length(failed$sample)
+
+b16172.isolates <- subset(failed, pangolin_lineage == "B.1.617.2", select=c(sample,pangolin_lineage,seq_alerts))
+total.b16172.failed <- length(b16172.isolates$sample)
+perc.b16172.failed <- round((total.b16172.failed / total.failed * 100))
+
+ay.isolates <- failed[str_detect(failed$pangolin_lineage, "AY"), ]
+total.ay.failed <- length(ay.isolates$sample)
+perc.ay.failed <- round((total.ay.failed / total.failed * 100))
+
+b11529.isolates <- failed[str_detect(failed$pangolin_lineage, "B.1.1.529"), ]
+total.b11529.failed <- length(b11529.isolates$sample)
+perc.b11529.failed <- round((total.b11529.failed / total.failed * 100))
+
+merged.voc.df.failed <- rbind(b16172.isolates,ay.isolates)
+merged.voc.df.failed <- rbind(merged.voc.df.failed,b11529.isolates)
+write.table(merged.voc.df.failed, "vadr_failed_voc_samples.csv", sep=",", row.names = FALSE, col.names = TRUE)
+total.voc.failed <- length(merged.voc.df.failed$sample)
+perc.voc.failed <- round((total.voc.failed / total.failed * 100))
+
+
+#--------------------------
+# print Lineage summaries
+#--------------------------
+
+cat(paste("Of the ", total.failed, " isolates that failed VADR QC, ", total.voc.failed, " (", perc.voc.failed, "\\%) were determined to be Variants of Concern. In the failed VOC dataset, ", total.b16172.failed, " (", perc.b16172.failed, "\\%) were lineage B.1.617.2, ",total.ay.failed, " (", perc.ay.failed, "\\%) were lineage AY, and ",total.b11529.failed, " (", perc.b11529.failed, "\\%) were lineage Omicron.\n", sep=""))
+
+@
+\vspace{20pt}
+<<label=xtable4,echo=FALSE,results=tex>>=
+
+#---------------------------
+# Table 3 - Analysis Summary
+#---------------------------
+library(xtable)
+library(stringr)
+library(dplyr)
+
+data(merged.voc.df.failed)
+dat <- merged.voc.df.failed[1:3]
+x <- xtable(dat)
+colnames(x) <- c("Sample","Lineage","Seq Error")
+next.table <- 1
+print(xtable(x, caption = "Failed Sample VOC Lineage Assignment and VADR Errors",
+  label = "tab:one"), hline.after=c(-1,0), tabular.environment = "longtable", caption.placement = "top", include.rownames=FALSE)
+next.table <- next.table + 1
+
+@
+\end{small}
+
+
+@
+\subsection{Mutations Analysis}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+
+#---------------------------------------------------------
+# Determine total mutations
+#---------------------------------------------------------
+library(stringr)
+library(dplyr)
+library(tidyr)
+
+mutations <- seq.results %>%
+                    select(sample,vadr_status,pangolin_lineage,pangolin_version,
+                           clade,nextclade_version,insertions,deletions,nucleotide_subs,
+                           amino_acid_subs)
+aa_mutations <- mutations %>% select(sample,amino_acid_subs)
+aa_mutation_data <- data.frame(aa_mutations)
+aa_mutation_data <- aa_mutation_data %>%
+                    separate_rows(amino_acid_subs, sep=",")
+
+aa_dt_N <- aa_mutation_data[grep("N:",aa_mutation_data$amino_acid_subs),]
+aa_dt_N <- data.frame(aa_dt_N)
+
+aa_dt_S <- aa_mutation_data[grep("S:",aa_mutation_data$amino_acid_subs),]
+aa_dt_S <- data.frame(aa_dt_S)
+
+aa_dt_E <- aa_mutation_data[grep("E:",aa_mutation_data$amino_acid_subs),]
+aa_dt_E <- data.frame(aa_dt_E)
+
+aa_dt_M <- aa_mutation_data[grep("M:",aa_mutation_data$amino_acid_subs),]
+aa_dt_M <- data.frame(aa_dt_M)
+
+aa_dt_ORF1a <- aa_mutation_data[grep("ORF1a:",aa_mutation_data$amino_acid_subs),]
+aa_dt_ORF1a <- data.frame(aa_dt_ORF1a)
+
+aa_dt_ORF1b <- aa_mutation_data[grep("ORF1b:",aa_mutation_data$amino_acid_subs),]
+aa_dt_ORF1b <- data.frame(aa_dt_ORF1b)
+
+aa_dt_ORF3a <- aa_mutation_data[grep("ORF3a:",aa_mutation_data$amino_acid_subs),]
+aa_dt_ORF3a <- data.frame(aa_dt_ORF3a)
+
+aa_dt_ORF6 <- aa_mutation_data[grep("ORF6:",aa_mutation_data$amino_acid_subs),]
+aa_dt_ORF6 <- data.frame(aa_dt_ORF6)
+
+aa_dt_ORF7a <- aa_mutation_data[grep("ORF7a:",aa_mutation_data$amino_acid_subs),]
+aa_dt_ORF7a <- data.frame(aa_dt_ORF7a)
+
+aa_dt_ORF7b <- aa_mutation_data[grep("ORF7b:",aa_mutation_data$amino_acid_subs),]
+aa_dt_ORF7b <- data.frame(aa_dt_ORF7b)
+
+aa_dt_ORF8 <- aa_mutation_data[grep("ORF8:",aa_mutation_data$amino_acid_subs),]
+aa_dt_ORF8 <- data.frame(aa_dt_ORF8)
+
+aa_dt_ORF9b <- aa_mutation_data[grep("ORF9b:",aa_mutation_data$amino_acid_subs),]
+aa_dt_ORF9b <- data.frame(aa_dt_ORF9b)
+
+nt_mutations <- mutations %>%
+                    select(sample,nucleotide_subs)
+nt_mutation_data <- data.frame(nt_mutations)
+
+insert_mutations <- mutations %>%
+                    select(sample,insertions)
+insert_mutation_data <- data.frame(insert_mutations)
+
+del_mutations <- mutations %>%
+                    select(sample,deletions)
+del_mutation_data <- data.frame(del_mutations)
+
+#--------------------------
+# print Lineage summaries
+#--------------------------
+
+cat(paste("The following analysis uses the mutations as determined by NextClade. Mutations are listed according to which gene product is affected, ie \n N, S, E, M, ORF1a, ORF1b, ORF3a, ORF6, ORF7a, ORF7b, ORF8, and ORF9b. Isolates that have no mutations are excluded from this section.", sep=""))
+
+@
+\subsubsection{N Gene Mutations Analysis}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+
+@
+\vspace{20pt}
+<<label=xtable4,echo=FALSE,results=tex>>=
+
+#---------------------------
+# Table 3 - Analysis Summary
+#---------------------------
+library(xtable)
+library(stringr)
+library(dplyr)
+
+
+x <- xtable(aa_dt_N)
+colnames(x) <- c("Sample","N Amino Acid Mutations")
+next.table <- 1
+print(xtable(x, caption = "N Amino Acid Muations in Samples",
+  label = "tab:one"), hline.after=c(-1,0), tabular.environment = "longtable", caption.placement = "top", include.rownames=FALSE)
+next.table <- next.table + 1
+
+@
+\end{small}
+
+@
+\subsubsection{S Gene Mutations Analysis}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+
+@
+\vspace{20pt}
+<<label=xtable4,echo=FALSE,results=tex>>=
+
+#---------------------------
+# Table 3 - Analysis Summary
+#---------------------------
+library(xtable)
+library(stringr)
+library(dplyr)
+
+
+x <- xtable(aa_dt_S)
+colnames(x) <- c("Sample","S Amino Acid Mutations")
+next.table <- 1
+print(xtable(x, caption = "S Amino Acid Muations in Samples",
+  label = "tab:one"), hline.after=c(-1,0), tabular.environment = "longtable", caption.placement = "top", include.rownames=FALSE)
+next.table <- next.table + 1
+
+@
+\end{small}
+
+@
+\subsubsection{E Gene Mutations Analysis}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+
+@
+\vspace{20pt}
+<<label=xtable4,echo=FALSE,results=tex>>=
+
+#---------------------------
+# Table 3 - Analysis Summary
+#---------------------------
+library(xtable)
+library(stringr)
+library(dplyr)
+
+
+x <- xtable(aa_dt_E)
+colnames(x) <- c("Sample","E Amino Acid Mutations")
+next.table <- 1
+print(xtable(x, caption = "E Amino Acid Muations in Samples",
+  label = "tab:one"), hline.after=c(-1,0), tabular.environment = "longtable", caption.placement = "top", include.rownames=FALSE)
+next.table <- next.table + 1
+
+@
+\end{small}
+
+
+@
+\subsubsection{M Gene Mutations Analysis}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+
+@
+\vspace{20pt}
+<<label=xtable4,echo=FALSE,results=tex>>=
+
+#---------------------------
+# Table 3 - Analysis Summary
+#---------------------------
+library(xtable)
+library(stringr)
+library(dplyr)
+
+
+x <- xtable(aa_dt_M)
+colnames(x) <- c("Sample","M Amino Acid Mutations")
+next.table <- 1
+print(xtable(x, caption = "M Amino Acid Muations in Samples",
+  label = "tab:one"), hline.after=c(-1,0), tabular.environment = "longtable", caption.placement = "top", include.rownames=FALSE)
+next.table <- next.table + 1
+@
+\end{small}
+
+@
+\subsubsection{ORF1a Gene Mutations Analysis}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+
+@
+\vspace{20pt}
+<<label=xtable4,echo=FALSE,results=tex>>=
+
+#---------------------------
+# Table 3 - Analysis Summary
+#---------------------------
+library(xtable)
+library(stringr)
+library(dplyr)
+
+
+x <- xtable(aa_dt_ORF1a)
+colnames(x) <- c("Sample","ORF1a Amino Acid Mutations")
+next.table <- 1
+print(xtable(x, caption = "ORF1a Amino Acid Muations in Samples",
+  label = "tab:one"), hline.after=c(-1,0), tabular.environment = "longtable", caption.placement = "top", include.rownames=FALSE)
+next.table <- next.table + 1
+@
+\end{small}
+
+@
+\subsubsection{ORF1b Gene Mutations Analysis}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+
+@
+\vspace{20pt}
+<<label=xtable4,echo=FALSE,results=tex>>=
+
+#---------------------------
+# Table 3 - Analysis Summary
+#---------------------------
+library(xtable)
+library(stringr)
+library(dplyr)
+
+
+x <- xtable(aa_dt_ORF1b)
+colnames(x) <- c("Sample","ORF1b Amino Acid Mutations")
+next.table <- 1
+print(xtable(x, caption = "ORF1b Amino Acid Muations in Samples",
+  label = "tab:one"), hline.after=c(-1,0), tabular.environment = "longtable", caption.placement = "top", include.rownames=FALSE)
+next.table <- next.table + 1
+@
+\end{small}
+
+@
+\subsubsection{ORF3a Gene Mutations Analysis}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+
+@
+\vspace{20pt}
+<<label=xtable4,echo=FALSE,results=tex>>=
+
+#---------------------------
+# Table 3 - Analysis Summary
+#---------------------------
+library(xtable)
+library(stringr)
+library(dplyr)
+
+
+x <- xtable(aa_dt_ORF3a)
+colnames(x) <- c("Sample","ORF3a Amino Acid Mutations")
+next.table <- 1
+print(xtable(x, caption = "ORF3a Amino Acid Muations in Samples",
+  label = "tab:one"), hline.after=c(-1,0), tabular.environment = "longtable", caption.placement = "top", include.rownames=FALSE)
+next.table <- next.table + 1
+@
+\end{small}
+
+@
+\subsubsection{ORF6 Gene Mutations Analysis}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+
+@
+\vspace{20pt}
+<<label=xtable4,echo=FALSE,results=tex>>=
+
+#---------------------------
+# Table 3 - Analysis Summary
+#---------------------------
+library(xtable)
+library(stringr)
+library(dplyr)
+
+
+x <- xtable(aa_dt_ORF6)
+colnames(x) <- c("Sample","ORF6 Amino Acid Mutations")
+next.table <- 1
+print(xtable(x, caption = "ORF6 Amino Acid Muations in Samples",
+  label = "tab:one"), hline.after=c(-1,0), tabular.environment = "longtable", caption.placement = "top", include.rownames=FALSE)
+next.table <- next.table + 1
+@
+\end{small}
+
+@
+\subsubsection{ORF7a Gene Mutations Analysis}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+
+@
+\vspace{20pt}
+<<label=xtable4,echo=FALSE,results=tex>>=
+
+#---------------------------
+# Table 3 - Analysis Summary
+#---------------------------
+library(xtable)
+library(stringr)
+library(dplyr)
+
+
+x <- xtable(aa_dt_ORF7a)
+colnames(x) <- c("Sample","ORF7a Amino Acid Mutations")
+next.table <- 1
+print(xtable(x, caption = "ORF7a Amino Acid Muations in Samples",
+  label = "tab:one"), hline.after=c(-1,0), tabular.environment = "longtable", caption.placement = "top", include.rownames=FALSE)
+next.table <- next.table + 1
+@
+\end{small}
+
+@
+\subsubsection{ORF7b Gene Mutations Analysis}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+
+@
+\vspace{20pt}
+<<label=xtable4,echo=FALSE,results=tex>>=
+
+#---------------------------
+# Table 3 - Analysis Summary
+#---------------------------
+library(xtable)
+library(stringr)
+library(dplyr)
+
+
+x <- xtable(aa_dt_ORF7b)
+colnames(x) <- c("Sample","ORF7b Amino Acid Mutations")
+next.table <- 1
+print(xtable(x, caption = "ORF7b Amino Acid Muations in Samples",
+  label = "tab:one"), hline.after=c(-1,0), tabular.environment = "longtable", caption.placement = "top", include.rownames=FALSE)
+next.table <- next.table + 1
+@
+\end{small}
+
+@
+\subsubsection{ORF8 Gene Mutations Analysis}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+
+@
+\vspace{20pt}
+<<label=xtable4,echo=FALSE,results=tex>>=
+
+#---------------------------
+# Table 3 - Analysis Summary
+#---------------------------
+library(xtable)
+library(stringr)
+library(dplyr)
+
+
+x <- xtable(aa_dt_ORF8)
+colnames(x) <- c("Sample","ORF8 Amino Acid Mutations")
+next.table <- 1
+print(xtable(x, caption = "ORF8 Amino Acid Muations in Samples",
+  label = "tab:one"), hline.after=c(-1,0), tabular.environment = "longtable", caption.placement = "top", include.rownames=FALSE)
+next.table <- next.table + 1
+@
+\end{small}
+
+@
+\subsubsection{ORF9b Gene Mutations Analysis}
+\begin{small}
+<<echo=FALSE,results=tex>>=
+
+@
+\vspace{20pt}
+<<label=xtable4,echo=FALSE,results=tex>>=
+
+#---------------------------
+# Table 3 - Analysis Summary
+#---------------------------
+library(xtable)
+library(stringr)
+library(dplyr)
+
+
+x <- xtable(aa_dt_ORF9b)
+colnames(x) <- c("Sample","ORF9b Amino Acid Mutations")
+next.table <- 1
+print(xtable(x, caption = "ORF9b Amino Acid Muations in Samples",
+  label = "tab:one"), hline.after=c(-1,0), tabular.environment = "longtable", caption.placement = "top", include.rownames=FALSE)
+next.table <- next.table + 1
+@
+\end{small}
+
+@
+\end{small}
+
+@
+\end{small}
+
+@
+\end{small}
+\restoregeometry
+
+
+@
+\end{document}

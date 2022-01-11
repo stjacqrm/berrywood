@@ -5,10 +5,8 @@
 //email: rachael.stjacques@dgs.virginia.gov
 
 //starting parameters
-params.assemblies = ""
-params.outdir = ""
-params.report = workflow.projectDir + '/report/report_template.Rmd'
-params.bash = workflow.projectDir + '/bash/create_berrywood_report.sh'
+//params.report = workflow.launchDir + '/report/report_template.Rmd'
+//params.bash = workflow.launchDir + '/bash/create_berrywood_report.sh'
 
 //setup channel to read in the fasta files
 Channel
@@ -17,11 +15,11 @@ Channel
     .set { assemblies}
 
 Channel
-    .fromPath(params.report)
+    .fromPath("$baseDir/report/report_template.Rmd")
     .set { report }
 
 Channel
-    .fromPath(params.bash)
+    .fromPath("$baseDir/bash/create_berrywood_report.sh")
     .set { bash }
 
 
