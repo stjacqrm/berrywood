@@ -19,13 +19,13 @@ $ nextflow run ~/berrywood/berrywood.nf --assemblies /path/to/assemblies
 #### To rename the output pdf
 
 ```
-$ nextflow run ~/berrywood/berrywood.nf --title "Title name in quotes"--assemblies /path/to/assemblies
+$ nextflow run ~/berrywood/berrywood.nf --title "Title name in quotes" --assemblies /path/to/assemblies
 ```
 
 ### Output files
 The default directory for Berrywood output data is berrywood_results, unless changed by using the ```--outdir``` flag:
 ```
-$ nextflow run ~/berrywood/berrywood.nf --outdir berrywood_results_2 /path/to/assemblies
+$ nextflow run ~/berrywood/berrywood.nf --outdir berrywood_results_2 --assemblies /path/to/assemblies
 ```
 
 ![Berrywood output](/assets/berrywood_output.PNG)
