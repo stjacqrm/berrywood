@@ -32,22 +32,22 @@ $ nextflow run ~/berrywood/berrywood.nf --outdir berrywood_results_2 /path/to/as
 
 Included in the directory:
 - Berrywood-report.pdf
- - a summary report of the lingeages, mutations, pass, and failed samples in the dataset
+    - a summary report of the lingeages, mutations, pass, and failed samples in the dataset
 - berrywood_date.csv
- - a csv file of the mutation, lineage, pass, and fail data
+    - a csv file of the mutation, lineage, pass, and fail data
 - logs/multi_fasta
- - the multi.fasta file produced by the pipeline
+    - the multi.fasta file produced by the pipeline
 - results/berrywood_results/csvs
- - all csv files produced by Berrywood
+    - all csv files produced by Berrywood
 - results/nextclade_resutls
- - nextclade results
+    - nextclade results
 - results/pangolin_results
- - pangolin results
+    - pangolin results
 - results/vadr_results
- - annotations
-  - sqa file from vadr
+    - annotations
+     - sqa file from vadr
  - csvs
-  - Berrywood csv file made from VADR output
+    - Berrywood csv file made from VADR output
 
 ### Author
 
