@@ -45,9 +45,9 @@ Included in the directory:
     - pangolin results
 - results/vadr_results
     - annotations
-     - sqa file from vadr
- - csvs
-    - Berrywood csv file made from VADR output
+        - sqa file from vadr
+    - csvs
+        - Berrywood csv file made from VADR output
 
 ### Author
 
